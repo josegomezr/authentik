@@ -1,0 +1,74 @@
+image: registry.opensuse.org/home/josegomezr/branches/isv/suseinfra/containers/containerfile/suseinfra/podman:latest
+
+variables:
+  REGISTRY_REPO: suse/authentik/server
+  REGISTRY_TAG_PREFIX: "2025.6.3"
+
+.main_only:
+  rules:
+    - if: $CI_COMMIT_BRANCH == 'main'
+      when: manual
+    - if: $MAIN_ONLY_DEPLOY_OVERRIDE == 'true'
+      when: manual
+
+.mr_only:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+
+.development:
+  variables:
+    REGISTRY_TAG_PREFIX: "2025.6.3-dev"
+  environment:
+    name: development
+
+.production:
+  variables:
+    REGISTRY_TAG_PREFIX: "2025.6.3-prd"
+  environment:
+    name: production
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+stages:
+  # TODO: add a test phase here
+  - build
+
+build-development:
+  stage: build
+  extends:
+    - .development
+  allow_failure: false
+  before_script:
+    - export REGISTRY_IMAGE="${REGISTRY_DOMAIN}/${REGISTRY_REPO}"
+    - export REGISTRY_TAG="${REGISTRY_TAG_PREFIX}-${CI_MERGE_REQUEST_IID}"
+    - export REGISTRY_FQDN="${REGISTRY_IMAGE}:${REGISTRY_TAG}"
+    - echo "$REGISTRY_PASSWORD" | podman login "$REGISTRY_DOMAIN" --username "$REGISTRY_USER" --password-stdin
+  script:
+    - echo "Building $REGISTRY_FQDN"
+    - podman build -t "$REGISTRY_FQDN" -f server-patched.Dockerfile .
+    - echo "Pushing $REGISTRY_FQDN"
+    - podman push "$REGISTRY_FQDN"
+  rules:
+    - !reference [.mr_only, rules]
+
+build-production:
+  stage: build
+  allow_failure: false
+  extends:
+    - .production
+  before_script:
+    - export REGISTRY_IMAGE="${REGISTRY_DOMAIN}/${REGISTRY_REPO}"
+    - export REGISTRY_TAG="${REGISTRY_TAG_PREFIX}-${CI_COMMIT_SHORT_SHA}"
+    - export REGISTRY_FQDN="${REGISTRY_IMAGE}:${REGISTRY_TAG}"
+    - echo "$REGISTRY_PASSWORD" | podman login "$REGISTRY_DOMAIN" --username "$REGISTRY_USER" --password-stdin
+  script:
+    - echo "Building $REGISTRY_FQDN"
+    - podman build -t "$REGISTRY_FQDN" -f server-patched.Dockerfile .
+    - echo "Pushing $REGISTRY_FQDN"
+    - podman push "$REGISTRY_FQDN"
+  rules:
+    - !reference [.main_only, rules]
