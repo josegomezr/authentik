@@ -89,10 +89,12 @@ class SCIMClient[TModel: "Model", TConnection: "Model", TSchema: "BaseModel"](
     def get_service_provider_config(self):
         """Get Service provider config"""
         default_config = ServiceProviderConfiguration.default()
+        endpoint = "/ServiceProviderConfig"
+        if self.provider.compatibility_mode == SCIMCompatibilityMode.SFDC:
+            endpoint = "/ServiceProviderConfigs"
+
         try:
-            config = ServiceProviderConfiguration.model_validate(
-                self._request("GET", "/ServiceProviderConfig")
-            )
+            config = ServiceProviderConfiguration.model_validate(self._request("GET", endpoint))
             if self.provider.compatibility_mode == SCIMCompatibilityMode.AWS:
                 config.patch.supported = False
             if self.provider.compatibility_mode == SCIMCompatibilityMode.SLACK:

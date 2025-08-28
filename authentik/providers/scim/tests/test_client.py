@@ -7,7 +7,7 @@ from authentik.blueprints.tests import apply_blueprint
 from authentik.core.models import Application
 from authentik.lib.generators import generate_id
 from authentik.providers.scim.clients.base import SCIMClient
-from authentik.providers.scim.models import SCIMMapping, SCIMProvider
+from authentik.providers.scim.models import SCIMMapping, SCIMProvider, SCIMCompatibilityMode
 from authentik.providers.scim.tasks import scim_sync
 
 
@@ -88,3 +88,17 @@ class SCIMClientTests(TestCase):
     def test_scim_sync(self):
         """test scim_sync task"""
         scim_sync.send(self.provider.pk).get_result()
+
+    def test_salesforce_compat_mode(self):
+        """Test Salesforce compat mode"""
+
+        self.provider.compatibility_mode = SCIMCompatibilityMode.SFDC
+        with Mocker() as mock:
+            mock: Mocker
+            mock.get(
+                "https://localhost/ServiceProviderConfigs",
+                json={},
+            )
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 1)
+            self.assertEqual(mock.request_history[0].method, "GET")

@@ -9,7 +9,12 @@ from authentik.lib.sync.mapper import PropertyMappingManager
 from authentik.lib.sync.outgoing.exceptions import ObjectExistsSyncException, StopSync
 from authentik.policies.utils import delete_none_values
 from authentik.providers.scim.clients.base import SCIMClient
-from authentik.providers.scim.clients.schema import SCIM_USER_SCHEMA
+from authentik.providers.scim.clients.schema import (
+    SCIM_USER_SCHEMA,
+    PatchRequest,
+    PatchOperation,
+    PatchOp,
+)
 from authentik.providers.scim.clients.schema import User as SCIMUserSchema
 from authentik.providers.scim.models import SCIMMapping, SCIMProvider, SCIMProviderUser
 
@@ -71,9 +76,8 @@ class SCIMUserClient(SCIMClient[User, SCIMProviderUser, SCIMUserSchema]):
             except ObjectExistsSyncException as exc:
                 if not self._config.filter.supported:
                     raise exc
-                users = self._request(
-                    "GET", f"/Users?{urlencode({'filter': f'userName eq {scim_user.userName}'})}"
-                )
+                filter_expr = 'userName eq "{}"'.format(scim_user.userName)
+                users = self._request("GET", f"/Users?{urlencode({"filter": filter_expr})}")
                 users_res = users.get("Resources", [])
                 if len(users_res) < 1:
                     raise exc
@@ -95,6 +99,33 @@ class SCIMUserClient(SCIMClient[User, SCIMProviderUser, SCIMUserSchema]):
         """Update existing user"""
         scim_user = self.to_schema(user, connection)
         scim_user.id = connection.scim_id
+
+        if self._config.patch.supported:
+            return self._update_patch(user, scim_user, connection)
+        return self._update_put(user, scim_user, connection)
+
+    def _update_patch(self, user: User, scim_user: SCIMUserSchema, connection: SCIMProviderUser):
+        response = self._request(
+            "PATCH",
+            f"/Users/{connection.scim_id}",
+            json=PatchRequest(
+                Operations=[
+                    PatchOperation(
+                        op=PatchOp.replace,
+                        path=None,
+                        value=[
+                            scim_user.model_dump(
+                                mode="json", exclude_unset=True, exclude=["schemas"]
+                            )
+                        ],
+                    )
+                ]
+            ).model_dump(mode="json"),
+        )
+        connection.attributes = response
+        connection.save()
+
+    def _update_put(self, user: User, scim_user: SCIMUserSchema, connection: SCIMProviderUser):
         response = self._request(
             "PUT",
             f"/Users/{connection.scim_id}",
