@@ -271,6 +271,122 @@ class SCIMUserTests(TestCase):
         self.assertEqual(mock.request_history[3].method, "PUT")
 
     @Mocker()
+    def test_user_create_update_patch_support(self, mock: Mocker):
+        """Test user creation and update via patch support"""
+        scim_id = generate_id()
+        mock: Mocker
+        mock.get(
+            "https://localhost/ServiceProviderConfig",
+            json={
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig"],
+                "documentationUri": (
+                    "https://docs.aws.amazon.com/singlesignon/latest/"
+                    "userguide/manage-your-identity-source-idp.html"
+                ),
+                "authenticationSchemes": [
+                    {
+                        "type": "oauthbearertoken",
+                        "name": "OAuth Bearer Token",
+                        "description": (
+                            "Authentication scheme using the OAuth Bearer Token Standard"
+                        ),
+                        "specUri": "https://www.rfc-editor.org/info/rfc6750",
+                        "documentationUri": (
+                            "https://docs.aws.amazon.com/singlesignon/latest/"
+                            "userguide/provision-automatically.html"
+                        ),
+                        "primary": True,
+                    }
+                ],
+                "patch": {"supported": True},
+                "bulk": {"supported": False, "maxOperations": 1, "maxPayloadSize": 1048576},
+                "filter": {"supported": True, "maxResults": 50},
+                "changePassword": {"supported": False},
+                "sort": {"supported": False},
+                "etag": {"supported": False},
+            },
+        )
+        mock.post(
+            "https://localhost/Users",
+            json={
+                "id": scim_id,
+            },
+        )
+        mock.patch(
+            f"https://localhost/Users/",
+            json={
+                "id": scim_id,
+            },
+        )
+        uid = generate_id()
+        user = User.objects.create(
+            username=uid,
+            name=f"{uid} {uid}",
+            email=f"{uid}@goauthentik.io",
+        )
+        self.assertEqual(mock.call_count, 2)
+        self.assertEqual(mock.request_history[0].method, "GET")
+        self.assertEqual(mock.request_history[1].method, "POST")
+        body = loads(mock.request_history[1].body)
+        with open("schemas/scim-user.schema.json", encoding="utf-8") as schema:
+            validate(body, loads(schema.read()))
+        self.assertEqual(
+            body,
+            {
+                "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+                "active": True,
+                "emails": [
+                    {
+                        "primary": True,
+                        "type": "other",
+                        "value": f"{uid}@goauthentik.io",
+                    }
+                ],
+                "displayName": f"{uid} {uid}",
+                "externalId": user.uid,
+                "name": {
+                    "familyName": uid,
+                    "formatted": f"{uid} {uid}",
+                    "givenName": uid,
+                },
+                "userName": uid,
+            },
+        )
+        user.save()
+        self.assertEqual(mock.call_count, 4)
+        self.assertEqual(mock.request_history[0].method, "GET")
+        self.assertEqual(mock.request_history[1].method, "POST")
+        self.assertEqual(mock.request_history[2].method, "GET")
+        self.assertEqual(mock.request_history[3].method, "PATCH")
+
+        body = loads(mock.request_history[3].body)
+        client = self.provider.client_for_model(User)
+        schema = client.to_schema(user, None)
+        self.assertEqual(
+            body,
+            {
+                "schemas": ["urn:ietf:params:scim:api:messages:2.0:PatchOp"],
+                "Operations": [
+                    {
+                        "path": None,
+                        "op": "replace",
+                        "value": [
+                            dict(
+                                id=scim_id,
+                                **schema.model_dump(
+                                    mode="json",
+                                    exclude_unset=True,
+                                    exclude_none=True,
+                                    exclude=["schemas"],
+                                ),
+                            )
+                        ],
+                    }
+                ],
+            },
+        )
+
+    @Mocker()
     def test_user_create_delete(self, mock: Mocker):
         """Test user creation"""
         scim_id = generate_id()
