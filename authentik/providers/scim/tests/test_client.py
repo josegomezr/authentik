@@ -1,6 +1,7 @@
 """SCIM Client tests"""
 
 from django.test import TestCase
+from django.utils.http import urlencode
 from requests_mock import Mocker
 
 from authentik.blueprints.tests import apply_blueprint
@@ -89,9 +90,72 @@ class SCIMClientTests(TestCase):
         """test scim_sync task"""
         scim_sync.send(self.provider.pk).get_result()
 
+    def test_oauth2_token_fail(self):
+        """test failing oauth2 token"""
+        qs = {
+            "auth_url": "https://localhost/oauth2/token",
+            "client_id": "super-dooper-client",
+            "grant_type": "client_credentials",
+            "client_secret": "zuper-zecret",
+        }
+        oauth2_token = f"__OAUTH2__{urlencode(qs)}"
+        self.provider.token = oauth2_token
+        SCIMClient(self.provider)
+        self.assertEqual(mock.call_count, 1)
+        self.assertEqual(self.provider.token, oauth2_token)
+
+    def test_oauth2_token_fail(self):
+        """test failing oauth2 token"""
+        qs = {
+            "auth_url": "https://localhost/oauth2/token",
+            "client_id": "super-dooper-client",
+            "grant_type": "client_credentials",
+            "client_secret": "zuper-zecret",
+        }
+        oauth2_token = f"__OAUTH2__{urlencode(qs)}"
+        self.provider.token = oauth2_token
+        with Mocker() as mock:
+            mock: Mocker
+            mock.post(
+                "https://localhost/oauth2/token",
+                status_code=400,
+            )
+            mock.get(
+                "https://localhost/ServiceProviderConfigs",
+                json={},
+            )
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 1)
+            self.assertEqual(mock.request_history[0].method, "POST")
+
+    def test_oauth2_token_success(self):
+        """test failing oauth2 token"""
+        qs = {
+            "auth_url": "https://localhost/oauth2/token",
+            "client_id": "super-dooper-client",
+            "grant_type": "client_credentials",
+            "client_secret": "zuper-zecret",
+        }
+        oauth2_token = f"__OAUTH2__{urlencode(qs)}"
+        self.provider.token = oauth2_token
+
+        with Mocker() as mock:
+            mock: Mocker
+            mock.post(
+                "https://localhost/oauth2/token", status_code=200, json={"access_token": "my-token"}
+            )
+            mock.get(
+                "https://localhost/ServiceProviderConfig",
+                json={},
+            )
+            SCIMClient(self.provider)
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 3)
+            self.assertEqual(mock.request_history[0].method, "POST")
+            self.assertEqual(mock.request_history[-1].headers["Authorization"], "Bearer my-token")
+
     def test_salesforce_compat_mode(self):
         """Test Salesforce compat mode"""
-
         self.provider.compatibility_mode = SCIMCompatibilityMode.SFDC
         with Mocker() as mock:
             mock: Mocker
