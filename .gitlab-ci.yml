@@ -2,7 +2,7 @@ image: registry.opensuse.org/home/josegomezr/branches/isv/suseinfra/containers/c
 
 variables:
   REGISTRY_REPO: suse/authentik/server
-  REGISTRY_TAG_PREFIX: "2025.6.3"
+  REGISTRY_TAG_PREFIX: "2025.10.2"
 
 .main_only:
   rules:
@@ -18,13 +18,13 @@ variables:
 
 .development:
   variables:
-    REGISTRY_TAG_PREFIX: "2025.6.3-dev"
+    REGISTRY_TAG_PREFIX: "2025.10.2-dev"
   environment:
     name: development
 
 .production:
   variables:
-    REGISTRY_TAG_PREFIX: "2025.6.3-prd"
+    REGISTRY_TAG_PREFIX: "2025.10.2-prd"
   environment:
     name: production
 
