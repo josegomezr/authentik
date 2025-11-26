@@ -7,7 +7,7 @@ from authentik.blueprints.tests import apply_blueprint
 from authentik.core.models import Application
 from authentik.lib.generators import generate_id
 from authentik.providers.scim.clients.base import SCIMClient
-from authentik.providers.scim.models import SCIMMapping, SCIMProvider
+from authentik.providers.scim.models import SCIMCompatibilityMode, SCIMMapping, SCIMProvider
 from authentik.providers.scim.tasks import scim_sync
 
 
@@ -88,3 +88,66 @@ class SCIMClientTests(TestCase):
     def test_scim_sync(self):
         """test scim_sync task"""
         scim_sync.send(self.provider.pk).get_result()
+
+    ### SUSE OAuth
+
+    def _add_suse_oauth2_params(self, provider):
+        provider.token = r"%use-oauth-params%"
+        provider.auth_oauth_params = dict(
+            auth_url="https://localhost/oauth2/token",
+            client_id="super-dooper-client",
+            grant_type="client_credentials",
+            client_secret="zuper-zecret",
+        )
+
+    def test_oauth2_token_fail(self):
+        """test failing oauth2 token"""
+        self._add_suse_oauth2_params(self.provider)
+        with Mocker() as mock:
+            mock: Mocker
+            mock.post(
+                "https://localhost/oauth2/token",
+                status_code=400,
+            )
+            mock.get(
+                "https://localhost/ServiceProviderConfigs",
+                json={},
+            )
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 1)
+            self.assertEqual(mock.request_history[0].method, "POST")
+
+    def test_oauth2_token_success(self):
+        """test failing oauth2 token"""
+        self._add_suse_oauth2_params(self.provider)
+
+        with Mocker() as mock:
+            mock: Mocker
+            mock.post(
+                "https://localhost/oauth2/token", status_code=200, json={"access_token": "my-token"}
+            )
+            mock.get(
+                "https://localhost/ServiceProviderConfig",
+                json={},
+            )
+            SCIMClient(self.provider)
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 3)
+            self.assertEqual(mock.request_history[0].method, "POST")
+            self.assertEqual(mock.request_history[1].method, "GET")
+            self.assertEqual(mock.request_history[2].method, "GET")
+            self.assertEqual(mock.request_history[-1].headers["Authorization"], "Bearer my-token")
+
+    def test_salesforce_compat_mode(self):
+        """Test Salesforce compat mode"""
+        # self._add_suse_oauth2_params(self.provider)
+        self.provider.compatibility_mode = SCIMCompatibilityMode.SALESFORCE
+        with Mocker() as mock:
+            mock: Mocker
+            mock.get(
+                "https://localhost/ServiceProviderConfigs",
+                json={},
+            )
+            SCIMClient(self.provider)
+            self.assertEqual(mock.call_count, 1)
+            self.assertEqual(mock.request_history[0].method, "GET")

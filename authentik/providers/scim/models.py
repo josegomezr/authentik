@@ -17,6 +17,7 @@ from authentik.lib.models import SerializerModel
 from authentik.lib.sync.outgoing.base import BaseOutgoingSyncClient
 from authentik.lib.sync.outgoing.models import OutgoingSyncProvider
 from authentik.providers.scim.clients.auth import SCIMTokenAuth
+from authentik.providers.scim.clients.suse_salesforce_auth import SUSESCIMOAuth2Handler
 
 LOGGER = get_logger()
 
@@ -128,7 +129,12 @@ class SCIMProvider(OutgoingSyncProvider, BackchannelProvider):
         help_text=_("Alter authentik behavior for vendor-specific SCIM implementations."),
     )
 
+    SUSE_OAUTH_NEEDLE = r"%use-oauth-params%"
+
     def scim_auth(self) -> AuthBase:
+        if self.token == self.SUSE_OAUTH_NEEDLE:
+            return SUSESCIMOAuth2Handler(self)
+
         if self.auth_mode == SCIMAuthenticationMode.OAUTH:
             try:
                 from authentik.enterprise.providers.scim.auth_oauth2 import SCIMOAuthAuth
