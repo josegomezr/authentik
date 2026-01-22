@@ -4,5 +4,6 @@ USER root
 RUN apt update && apt install -y --no-install-recommends vim git-core && rm -rf /var/cache/apt /var/lib/apt/lists/
 
 COPY ./authentik/ /authentik
+COPY ./suse_settings/user_settings.py /data/user_settings.py
 
 USER 1000
